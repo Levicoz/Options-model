@@ -5,9 +5,11 @@ Options_model.py
 A hybrid financial modeling tool combining Monte Carlo simulation and PyTorch neural networks for pricing American-style options.  
 
 
+
 options_model_v1.5.py
 
 Same as Options_model.py as well as including a user input section. Introduces OOP for the code structure.
+
 
 
 options_model_2.py
