@@ -1,7 +1,9 @@
+streamlit
 numpy
-matplotlib
 pandas
+scipy
 torch
 yfinance
 plotly
+matplotlib
 tqdm
