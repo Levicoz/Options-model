@@ -209,4 +209,3 @@ def compute_curve_for_S0(S0, K, r, sigma, num_simulations, intervals_per_day, to
             'Zero Prob': zero_prob
         })
     return records
-
