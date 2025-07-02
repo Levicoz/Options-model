@@ -57,6 +57,7 @@ def price_american_option(
     """
     Prices an American option using the Longstaff-Schwartz least-squares Monte Carlo method,
     with a neural network for the continuation value regression.
+    Returns: (mean, std, probability expires worthless)
     """
     # --- Input validation ---
     if S0 <= 0 or K <= 0 or T <= 0 or sigma <= 0:
@@ -151,29 +152,9 @@ def price_american_option(
     # No extra discount here—cashflows are now at t=0
     est_price = cashflows.mean()
     std_price = cashflows.std()
-    lower = max(0, est_price - std_price)
-    upper = est_price + std_price
-
     zero_prob = np.mean(cashflows == 0)
-    print(f"Probability option expires worthless: {zero_prob:.2%}")
 
-    print(
-        f"Estimated American {option_type} price: ${est_price:.4f} "
-        f"(S0={S0}, K={K}, T={T}, r={r}, sigma={sigma}, "
-        f"simulations={num_simulations}, steps={num_time_steps})"
-    )
-    print(
-        f"One standard deviation range: "
-        f"${lower:.4f} to ${upper:.4f}"
-    )
-
-    print(f"Mean: ${est_price:.4f}")
-    print(f"Std Dev: ${std_price:.4f}")
-    print(f"Min: ${cashflows.min():.4f}")
-    print(f"Max: ${cashflows.max():.4f}")
-    print(f"Probability expires worthless: {zero_prob:.2%}")
-
-    return est_price
+    return est_price, std_price, zero_prob
 
 def price_from_ticker(
     ticker: str,
@@ -185,8 +166,7 @@ def price_from_ticker(
     num_time_steps: int = 50,
     lsm_poly_degree: int = 2,
     plot_paths: bool = False,
-    seed: int = 42,
-    sigma: float = None  # <-- Add this
+    seed: int = 42,    sigma: float = None
 ):
     """
     Fetch live S0 and sigma for `ticker`, then price the American option.
@@ -198,13 +178,13 @@ def price_from_ticker(
     else:
         sigma_to_use = sigma
     print(f"Fetched {ticker}: S0={S0:.2f}, sigma={sigma_to_use:.2%}")
-    price = price_american_option(
+    price, std, zero_prob = price_american_option(
         S0, K, T, r, sigma_to_use,
         num_simulations, num_time_steps,
         option_type, lsm_poly_degree,
         plot_paths, seed
     )
-    print(f"Estimated American {option_type} on {ticker}: ${price:.4f}")
+    print(f"Estimated American {option_type} on {ticker}: ${price:.4f} (Std: {std:.4f}, P(Worthless): {zero_prob:.2%})")
     return price
 
 def compute_curve_for_S0(S0, K, r, sigma, num_simulations, intervals_per_day, total_points,
@@ -215,142 +195,18 @@ def compute_curve_for_S0(S0, K, r, sigma, num_simulations, intervals_per_day, to
         T = d / 365
         steps = max(10, min(130, int(np.ceil(d))))
         np.random.seed(seed)
-        est_price = price_american_option(
+        est_price, std_price, zero_prob = price_american_option(
             S0, K, T, r, sigma,
             num_simulations, steps,
             option_type, lsm_poly_degree,
             plot_paths, seed
         )
-        records.append({'S0': S0, 'Days to Expiry': d, 'Option Value': est_price})
+        records.append({
+            'S0': S0,
+            'Days to Expiry': d,
+            'Option Value': est_price,
+            'Std Dev': std_price,
+            'Zero Prob': zero_prob
+        })
     return records
-
-# Example usage:
-if __name__ == "__main__":
-    ticker = "AMD"
-    start_time = time.time()
-    S0_live, sigma_live = get_live_quote(ticker)
-    sigma_override = 0.47  # e.g., 0.35 for manual, or None for live
-    sigma = sigma_override if sigma_override is not None else sigma_live
-    K = 130
-    r = 0.05
-    option_type = 'call'
-    num_simulations = 200000
-    num_time_steps = 150
-    lsm_poly_degree = 2
-    plot_paths = False
-    seed = 2025
-
-    expiry = datetime.date(2025, 7, 6)
-    today = datetime.date.today()
-    days_to_expiry = (expiry - today).days
-
-    intervals_per_day = 4
-    total_points = days_to_expiry * intervals_per_day
-
-    # S0 sweep
-    s0_start = 110
-    s0_end = 140
-    s0_step = 3
-    s0_list = list(range(s0_start, s0_end + 1, s0_step))
-    if S0_live not in s0_list:
-        s0_list.append(int(S0_live))
-    s0_list = sorted(set(s0_list))
-
-    # ---- MAX_WORKERS suggestion ----
-    MAX_WORKERS = 6
-   
-    # Estimate compute time by timing a single S0 curve
-    import time
-
-    test_S0 = S0_live  # or pick any S0 from s0_list
-    print(f"Estimating compute time using S0 = {test_S0}...")
-    start_test = time.time()
-    _ = compute_curve_for_S0(
-        test_S0, K, r, sigma, num_simulations, intervals_per_day, total_points,
-        option_type, lsm_poly_degree, plot_paths, seed
-    )
-    elapsed_single = time.time() - start_test
-    print(f"Time for one S0 curve: {elapsed_single:.2f} seconds")
-
-    num_S0 = len(s0_list)
-    num_workers = MAX_WORKERS
-    est_total = elapsed_single * num_S0 / num_workers
-    print(f"Estimated total compute time: {est_total:.2f} seconds ({est_total/60:.1f} minutes)\n")
-
-    # Prepare arguments for parallel execution
-    args = [
-        (S0, K, r, sigma, num_simulations, intervals_per_day, total_points,
-         option_type, lsm_poly_degree, plot_paths, seed)
-        for S0 in s0_list
-    ]
-
-    records = []
-    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = [executor.submit(compute_curve_for_S0, *arg) for arg in args]
-        for future in tqdm(as_completed(futures), total=len(futures), desc="S0 curves"):
-            records.extend(future.result())
-
-  
-    df = pd.DataFrame(records)
-
-    # Plot all curves
-    fig = go.Figure()
-    for S0 in s0_list:
-        curve = df[df['S0'] == S0]
-        fig.add_trace(go.Scatter(
-            x=curve['Days to Expiry'],
-            y=curve['Option Value'],
-            mode='lines',
-            name=f"S0 = ${S0}" + (" (Live)" if S0 == int(S0_live) else ""),
-            line=dict(width=4 if S0 == int(S0_live) else 2, dash='solid' if S0 == int(S0_live) else 'dot'),
-            hovertemplate=(
-                'S0: $%{text}<br>'
-                'Days to Expiry: %{x:.2f}<br>'
-                'Option Value: %{y:.4f}<extra></extra>'
-            ),
-            text=[S0]*len(curve)
-        ))
-
-    fig.update_layout(
-        title=dict(
-            text=f"American {option_type.capitalize()} Option Value vs. Days to Expiry<br><sup>{ticker} | K=${K} | σ={sigma:.2f} | r={r:.2%}</sup>",
-            x=0.5,
-            xanchor='center'
-        ),
-        legend=dict(
-            title="Spot Price (S0)",
-            orientation="v",
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02,
-            bgcolor="rgba(255,255,255,0.5)"
-        ),
-        template="plotly_white",
-        dragmode='pan'
-    )
-    fig.update_xaxes(
-        title="Days to Expiry",
-        autorange='reversed',
-        showgrid=True,
-        ticks="outside",
-        tick0=0,
-        dtick=1,  # Tick every 1 day for finer granularity
-        showline=True,
-        linewidth=2,
-        linecolor='black'
-    )
-    fig.update_yaxes(
-        title="Option Value",
-        showgrid=True,
-        ticks="outside",
-        showline=True,
-        linewidth=2,
-        linecolor='black',
-        dtick=1  # Tick every $1; adjust to dtick=0.5 or dtick=2 as needed for your data range
-    )
-    fig.show()
-
-    elapsed = time.time() - start_time
-    print(f"\nTime it took to compute: {elapsed:.2f} seconds")
 
