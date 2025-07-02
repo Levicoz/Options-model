@@ -6,6 +6,11 @@ A hybrid financial modeling tool combining Monte Carlo simulation and PyTorch ne
 For personal or educational use only. Not licensed for reuse or redistribution.
 
 
+options_model_v1.5.py
+
+Same as Options_model.py just introduces OOP.
+
+
 options_model_2.py
 
 A flexible American option pricer supporting Black-Scholes and Heston models,
