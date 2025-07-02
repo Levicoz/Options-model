@@ -1,6 +1,4 @@
-# Options_model
-For personal or educational use only. Not licensed for reuse or redistribution.
-
+# Options-model
 
 Options_model.py
 
@@ -17,3 +15,5 @@ options_model_2.py
 A flexible American option pricer supporting Black-Scholes and Heston models,
 with neural network regression for LSM, live market data, and batch/parallel computation.
 Includes both command-line and Streamlit web UI support.
+
+For personal or educational use only. Not licensed for reuse or redistribution.
