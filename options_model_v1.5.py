@@ -303,4 +303,3 @@ if __name__ == "__main__":
 
     elapsed = time.time() - start_time
     print(f"\nTime it took to compute: {elapsed:.2f} seconds")
->>>>>>> fd9f5804c34a8cb126fbe143b47c6a2fa3d2ff96
