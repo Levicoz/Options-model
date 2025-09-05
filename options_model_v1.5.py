@@ -306,34 +306,34 @@ def compute_curve_worker(S0, K, r, sigma, option_type, lsm_poly_degree, seed,
 
 if __name__ == "__main__":
     try:
-        ticker = "AMD"
+        ticker = "KO"
         start_time = time.time()
         S0_live, sigma_live = MarketDataFetcher.get_live_quote(ticker)
-        sigma_override = 0.4747
+        sigma_override = 0.175
         sigma = sigma_override if sigma_override > 0 else sigma_live
-        K = 170
+        K = 68
         r = 0.0385
         option_type = 'call'
-        num_simulations = 500000
+        num_simulations = 100000
         num_time_steps = 70
         lsm_poly_degree = 2
         plot_paths = False
         seed = 2025
 
-        expiry = datetime.date(2025, 8, 29)
+        expiry = datetime.date(2025, 9, 12)
         today = datetime.date.today()
 
         # compute trading-hours-aware remaining time
         hours_remaining = compute_trading_hours_remaining(expiry)
         days_to_expiry = hours_remaining / TRADING_HOURS_PER_DAY  # fractional trading-days
 
-        intervals_per_day = 4  # samples per trading day (e.g. 4 --> ~one sample every ~1.625 hours)
+        intervals_per_day = 10  # samples per trading day (e.g. 4 --> ~one sample every ~1.625 hours)
         total_points = max(1, int(np.ceil(days_to_expiry * intervals_per_day)))
 
         # allow float S0 grid and float step
-        s0_start = 168.5
-        s0_end = 171.5
-        s0_step = 0.5  # can be float like 0.5 or 0.1
+        s0_start = 67
+        s0_end = 70
+        s0_step = 0.25  # can be float like 0.5 or 0.1
         # generate with numpy to support floats; round to avoid tiny fp accumulation
         raw = np.arange(s0_start, s0_end + s0_step / 2.0, s0_step)
         raw = np.round(raw, 8)  # reduce fp noise
