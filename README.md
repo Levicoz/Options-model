@@ -19,6 +19,6 @@ with neural network regression for LSM, live market data, and batch/parallel com
 Includes both command-line and Streamlit web UI support.
 
 ### options_model_3.py
-See options_mdodel_3 for the READ.md
+See options_model_3 for the READ.md
 
 For personal or educational use only. Not licensed for reuse or redistribution.
