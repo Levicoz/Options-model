@@ -9,114 +9,176 @@ This project implements advanced options pricing models using neural networks fo
 - **GPU-Accelerated Pricing**: Fast Monte Carlo option pricing with GPU acceleration
 - **Robust Error Handling**: Comprehensive error handling and fallback mechanisms
 
-## Recent Improvements
+## Core Components
 
-Based on comprehensive code review, the following critical improvements have been implemented:
+### Neural Network IV Surface Modeling
+- **Deep Neural Networks**: Multi-layer networks with residual connections for modeling complex volatility surfaces
+- **Arbitrage Constraints**: Built-in penalties to ensure no-arbitrage conditions across strikes and maturities
+- **Data Normalization**: Proper scaling and centering of log-moneyness and time-to-expiry features
+- **Vega Weighting**: Optional vega-weighted loss functions for market-consistent fitting
 
-### 1. Fixed IVSurfaceModel.fit Method
-- **Issue**: The `fit` method only fetched data but never actually trained the model
-- **Fix**: Complete implementation that properly trains the neural network and returns validation loss
+### Heston Model Calibration
+- **Stochastic Volatility**: Full Heston model implementation with correlation and mean reversion
+- **Market Regime Detection**: Adaptive parameter bounds based on current market volatility conditions
+- **Multiple Optimizers**: Fallback optimization strategies for robust parameter estimation
+- **Implied Volatility Objective**: Numerically stable objective functions using implied volatility rather than prices
 
-### 2. Improved DataScaler
-- **Issue**: Only divided by standard deviation without centering features
-- **Fix**: Proper centering around S0 (spot price) and normalization for both log-moneyness and time-to-expiry
-
-### 3. Vega-Weighted Loss Function
-- **Issue**: Raw price errors biased calibration toward tiny OTM options
-- **Fix**: Implemented vega-weighted implied volatility loss for better calibration quality
-
-### 4. Better Device Handling
-- **Issue**: Device type mismatches between string and torch.device objects
-- **Fix**: Robust device conversion and error handling
-
-### 5. Enhanced Heston Calibration
-- **Issue**: Price-relative errors caused instability with small option prices
-- **Fix**: Implied volatility inversion with vega weighting and robust error handling
+### GPU-Accelerated Pricing
+- **American Options**: Longstaff-Schwartz Monte Carlo with neural network basis functions
+- **Memory Optimization**: Bandwidth-optimized path simulation for faster GPU execution
+- **Adaptive Parameters**: Dynamic adjustment of simulation parameters based on option characteristics
+- **Caching Systems**: Reusable neural network components to avoid redundant computations
 
 ## Installation
 
 ```bash
-pip install torch numpy pandas scipy yfinance plotly tqdm matplotlib
+pip install -r requirements.txt
 ```
 
-## Quick Start
+### Dependencies
+- Python 3.8+
+- PyTorch (CPU or GPU)
+- NumPy, Pandas, SciPy
+- YFinance for market data
+- Plotly/Matplotlib for visualization
 
-### 1. Train IV Surface Neural Network
+### Optional GPU Support
+For GPU acceleration, install PyTorch with CUDA support:
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
 
+## Usage Examples
+
+### Basic Neural Network Training
 ```python
-from NN_training_stock_iv import run_iv_nn_training
+from NN_training_stock_iv import IVSurfaceModel, TrainingConfig
 
-# Train on real market data
-model, val_loss, df, S0 = run_iv_nn_training(
-    ticker="AAPL",
+# Configure training parameters
+config = TrainingConfig(
     epochs=50,
     hidden_dim=64,
-    num_hidden_layers=4
+    num_hidden_layers=4,
+    lambda_K=1e-3  # Arbitrage penalty weight
 )
+
+# Create and train model
+model = IVSurfaceModel(config)
+val_loss = model.fit("AAPL")  # Train on Apple options
+print(f"Validation loss: {val_loss:.6f}")
+
+# Predict implied volatilities
+strikes = [140, 150, 160]  # Strike prices
+maturities = [0.25, 0.5]   # Time to expiry in years
+iv_surface = model.predict(strikes, maturities)
 ```
 
-### 2. Calibrate Heston Parameters
-
+### Heston Model Calibration
 ```python
-from heston_calibration import calibrate_heston_from_iv_surface
+from heston_calibration import HestonCalibrator
 
-# Calibrate Heston model using trained IV surface
-heston_params = calibrate_heston_from_iv_surface(
-    nn_model=model,
-    ticker="AAPL", 
+# Initialize calibrator
+calibrator = HestonCalibrator()
+
+# Calibrate to market data
+result = calibrator.calibrate_to_market_data(
+    ticker="AAPL",
     S0=150.0,
     r=0.05
 )
+
+# Access calibrated parameters
+heston_params = result['params']
+print(f"Mean reversion: κ = {heston_params.kappa:.4f}")
+print(f"Long-term variance: θ = {heston_params.theta:.4f}")
+print(f"Vol of vol: σ = {heston_params.sigma:.4f}")
+print(f"Correlation: ρ = {heston_params.rho:.4f}")
 ```
 
-### 3. GPU Option Pricing
-
+### GPU-Accelerated Option Pricing
 ```python
 from option_model_2_gpu import AdvancedOptionPricer, RNGManager
 
-# Create GPU-accelerated pricer
-rng = RNGManager(42)
+# Setup GPU-accelerated pricer
+rng = RNGManager(seed=42)
 pricer = AdvancedOptionPricer(
-    K=150, r=0.05, sigma=0.2, option_type='call', rng_manager=rng
+    K=150,           # Strike price
+    r=0.05,          # Risk-free rate
+    sigma=0.2,       # Volatility
+    option_type='call',
+    rng_manager=rng
 )
 
-# Price American option
-price = pricer.price_american_option(S0=150, T=0.25, num_simulations=10000)
+# Price American option with GPU acceleration
+price = pricer.price_american_option(
+    S0=150,                # Current stock price
+    T=0.25,               # Time to expiry (3 months)
+    num_simulations=10000, # Monte Carlo paths
+    num_time_steps=50     # Discretization steps
+)
+
+print(f"American call option price: ${price:.2f}")
+```
+
+### Integrated Workflow
+```python
+# 1. Train neural network on market data
+model = IVSurfaceModel(TrainingConfig(epochs=100))
+model.fit("AAPL")
+
+# 2. Calibrate Heston model using trained IV surface
+calibrator = HestonCalibrator()
+heston_result = calibrator.calibrate_from_iv_surface(
+    nn_model=model,
+    ticker="AAPL",
+    S0=150.0,
+    r=0.05
+)
+
+# 3. Price options using calibrated parameters
+heston_params = heston_result['params']
+# Use parameters for advanced pricing models...
 ```
 
 ## Project Structure
 
 ```
-Options-model/
+options_model_3/
 ├── NN_training_stock_iv.py       # Neural network IV surface training
 ├── heston_calibration.py         # Heston model calibration
 ├── option_model_2_gpu.py         # GPU-accelerated option pricing
 ├── options_model_2.py            # CPU-based option pricing
 ├── test_improvements.py          # Comprehensive test suite
+├── demo_improvements.py          # Example usage demonstrations
+├── quick_validation.py           # Quick validation script
+├── requirements.txt              # Python dependencies
 └── README.md                     # This file
 ```
 
-## Key Classes and Functions
+## Core Classes and Functions
 
 ### Neural Network Training (`NN_training_stock_iv.py`)
 - `IVSurfaceModel`: High-level interface for IV surface modeling
-- `ImprovedIVNetwork`: Deep neural network with residual connections
-- `DataScaler`: Improved data normalization with proper centering
-- `ArbitragePenalty`: Finite-difference arbitrage constraints
+- `ImprovedIVNetwork`: Deep neural network with residual connections and layer normalization
+- `DataScaler`: Advanced data normalization with proper feature centering
+- `ArbitragePenalty`: Finite-difference constraints for no-arbitrage conditions
+- `TrainingConfig`: Configuration management for training parameters
 
 ### Heston Calibration (`heston_calibration.py`)
-- `HestonCalibrator`: Main calibration class with regime detection
-- `MarketRegimeDetector`: Adaptive parameter bounds based on market conditions
-- `CalibrationPoint`: Data structure for calibration points
-- Vega-weighted implied volatility objective function
+- `HestonCalibrator`: Main calibration class with regime detection and multiple optimizers
+- `MarketRegimeDetector`: Adaptive parameter bounds based on market volatility conditions
+- `CalibrationPoint`: Structured data for calibration target points
+- `HestonParams`: Parameter validation and management
+- Vega-weighted implied volatility objective functions
 
 ### GPU Option Pricing (`option_model_2_gpu.py`)
-- `AdvancedOptionPricer`: GPU-accelerated American option pricing
-- `SingleLSMNet`: Neural network for Longstaff-Schwartz method
-- Bandwidth-optimized path simulation
-- Cached LSM networks for better performance
+- `AdvancedOptionPricer`: GPU-accelerated American option pricing with Longstaff-Schwartz
+- `SingleLSMNet`: Neural network basis functions for regression
+- `RNGManager`: Reproducible random number generation for Monte Carlo
+- `PathSimulator`: Optimized path generation for various stochastic models
+- Bandwidth-optimized memory layouts for GPU performance
 
-## Testing
+## Testing and Validation
 
 Run the comprehensive test suite:
 
@@ -124,53 +186,91 @@ Run the comprehensive test suite:
 python test_improvements.py
 ```
 
-Tests verify:
-- DataScaler improvements
-- IVSurfaceModel.fit functionality
-- Device handling robustness
-- Heston calibration improvements
+The test suite validates:
+- Neural network training functionality
+- Data scaling and normalization accuracy
+- Device handling across CPU/GPU configurations
+- Heston calibration convergence
 - Vega-weighted loss computation
+- Arbitrage constraint enforcement
+- GPU memory optimization (when available)
 
-## Performance Improvements
+### Example Demonstrations
 
-The recent optimizations address critical performance bottlenecks:
+Run interactive examples:
+```bash
+python demo_improvements.py
+```
 
-1. **Memory bandwidth utilization**: Better GPU memory access patterns
-2. **LSM network caching**: Reuse networks across pricing calls
-3. **Adaptive epochs/steps**: Reduce computation for short-dated options
-4. **Vectorized operations**: Minimize CPU-GPU transfer overhead
+Quick validation:
+```bash
+python quick_validation.py
+```
 
-Expected performance gains:
-- 7-10x faster option pricing (42 minutes → 5-8 minutes)
-- Better GPU memory utilization (0.3GB → 1.5-2GB)
-- More stable calibration with vega weighting
+## Performance Characteristics
 
-## Mathematical Background
+### GPU Acceleration
+- Utilizes CUDA for Monte Carlo path simulation
+- Optimized memory bandwidth usage
+- Adaptive batch sizing for different GPU configurations
+- Automatic fallback to CPU if GPU unavailable
+
+### Numerical Stability
+- Vega-weighted objective functions prevent small-price instabilities
+- Robust parameter bounds with market regime detection
+- Multiple optimization fallback strategies
+- Comprehensive error handling and validation
+
+### Scalability
+- Vectorized operations for large option portfolios
+- Cached neural network components for repeated pricing
+- Adaptive simulation parameters based on option characteristics
+- Memory-efficient data structures
+
+## Mathematical Framework
 
 ### Implied Volatility Surface Modeling
-- Log-moneyness features: `m = log(K/S₀)`
-- Time-to-expiry: `τ = T`
-- Arbitrage constraints via finite differences
-- Residual neural networks with layer normalization
+The neural network models implied volatility as a function of log-moneyness and time-to-expiry:
+- **Features**: Log-moneyness `m = log(K/S₀)` and time-to-expiry `τ = T`
+- **Architecture**: Deep residual networks with layer normalization
+- **Constraints**: No-arbitrage conditions enforced via finite difference penalties
+- **Objective**: MSE loss with optional vega weighting for market consistency
 
-### Heston Model
-- Stochastic volatility: `dv = κ(θ - v)dt + ξ√v dW₂`
-- Stock price: `dS = rS dt + √v S dW₁`
-- Correlation: `dW₁ dW₂ = ρ dt`
-- Feller condition: `2κθ ≥ ξ²`
+### Heston Stochastic Volatility Model
+The Heston model describes asset price and volatility dynamics:
+- **Volatility process**: `dv = κ(θ - v)dt + ξ√v dW₂`
+- **Asset price**: `dS = rS dt + √v S dW₁`
+- **Correlation**: `dW₁ dW₂ = ρ dt`
+- **Feller condition**: `2κθ ≥ ξ²` ensures positive volatility
 
-### Calibration Objective
-Vega-weighted implied volatility MSE:
+### Calibration Methodology
+Parameter estimation uses vega-weighted implied volatility errors:
 ```
-L = Σᵢ wᵢ vega(Kᵢ,Tᵢ) [IV_model(Kᵢ,Tᵢ) - IV_market(Kᵢ,Tᵢ)]²
+Objective = Σᵢ vega(Kᵢ,Tᵢ) × [IV_model(Kᵢ,Tᵢ) - IV_market(Kᵢ,Tᵢ)]²
 ```
+This approach provides numerical stability and market-consistent parameter estimates.
+
+### American Option Pricing
+Uses the Longstaff-Schwartz method with neural network basis functions:
+- **Path simulation**: Monte Carlo with antithetic variates
+- **Continuation value**: Neural network regression on in-the-money paths
+- **Exercise decision**: Comparison of immediate vs. continuation value
+- **GPU optimization**: Vectorized operations and optimized memory layouts
 
 ## Contributing
 
-1. Run tests: `python test_improvements.py`
-2. Check code quality with type hints and docstrings
-3. Validate against synthetic data before real market testing
+1. **Code Quality**: Follow PEP 8 style guidelines and include comprehensive docstrings
+2. **Testing**: Run the full test suite before submitting changes: `python test_improvements.py`
+3. **Documentation**: Update README and code comments for new features
+4. **Validation**: Test against both synthetic and real market data
+5. **Performance**: Profile changes that may affect computational performance
 
 ## License
 
-This project is for educational and research purposes.
+This project is intended for educational and research purposes. Please review the licensing terms before using in commercial applications.
+
+## References
+
+- Heston, S.L. (1993). "A Closed-Form Solution for Options with Stochastic Volatility"
+- Longstaff, F.A. & Schwartz, E.S. (2001). "Valuing American Options by Simulation"
+- Gatheral, J. (2006). "The Volatility Surface: A Practitioner's Guide"
